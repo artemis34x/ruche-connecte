@@ -1,0 +1,91 @@
+#include <SPI.h>
+#include <Andee.h>
+
+//declaration d'objet qui apparaitra sur notre écran
+AndeeHelper humiditeBox;
+AndeeHelper poidsBox;
+AndeeHelper temperatureBox;
+AndeeHelper luminositeBox;
+AndeeHelper precipitationBox;
+
+/*float humidite;
+float poids;
+float temperature;
+float luminosite;
+float precipitation;*/
+
+//heure
+int timeHour;
+int timeMinute;
+int timeSecond;
+
+
+void setup()
+{
+  Andee.begin();  //communication entre Andee et Arduino
+  Andee.setName("Ruche connecte");//nom de notre arduino
+  Andee.clear();  // Clear the screen of any previous displays
+  setInitialData(); // appel de la fonction qui definie les objets et leur apparance
+}
+
+void setInitialData()
+{
+  //box humidite
+
+  humiditeBox.setId(0);  // Each object must have a unique ID number
+  humiditeBox.setType(DATA_OUT);  // This defines your object as a display box
+  humiditeBox.setLocation(0, 0, FULL); // Sets the location and size of your object
+  humiditeBox.setTitle("humidite");//title
+  humiditeBox.setData("");//mettre la variable humidite dans le loop :|
+  humiditeBox.setUnit("a remplacer"); //mettre l'heure en live
+    
+  //box poids
+  
+  temperatureBox.setId(1); // Don't forget to give it a unique ID number
+  temperatureBox.setType(DATA_OUT); // Another display box
+  temperatureBox.setLocation(1,0,FULL); // Second row, left-most, full size
+  temperatureBox.setTitle("temperature");
+  temperatureBox.setData("");
+  temperatureBox.setUnit("à remplacer");//mettre l'heure
+
+
+  luminositeBox.setId(2);  // Each object must have a unique ID number
+  luminositeBox.setType(DATA_OUT);  // This defines your object as a display box
+  luminositeBox.setLocation(2, 0, FULL); // Sets the location and size of your object
+  luminositeBox.setTitle("luminosite");//title
+  luminositeBox.setData("");//mettre la variable humidite dans le loop :|
+  luminositeBox.setUnit("a remplacer"); //mettre l'heure en live
+
+
+  precipitationBox.setId(3);  // Each object must have a unique ID number
+  precipitationBox.setType(DATA_OUT);  // This defines your object as a display box
+  precipitationBox.setLocation(3, 0, FULL); // Sets the location and size of your object
+  precipitationBox.setTitle("precipitation");//title
+  precipitationBox.setData("");//mettre la variable humidite dans le loop :|
+  precipitationBox.setUnit("a remplacer"); //mettre l'heure en live
+
+
+  humiditeBox.setId(4);  // Each object must have a unique ID number
+  humiditeBox.setType(DATA_OUT);  // This defines your object as a display box
+  humiditeBox.setLocation(4, 0, FULL); // Sets the location and size of your object
+  humiditeBox.setTitle("humidite");//title
+  humiditeBox.setData("");//mettre la variable humidite dans le loop :|
+  humiditeBox.setUnit("a remplacer"); //mettre l'heure en live
+
+// Arduino will run instructions here repeatedly until you power it off.
+void loop()
+{
+  //get the device time 
+  if (Andee.isConnected())
+  {
+  Andee.getDeviceTime(&timeHour, &timeMinute);  
+  }
+  
+  humiditeBox.update(); // Call update() to refresh the display on your screen
+  poidsBox.update(); // If you forgot to call update(), your object won't appear
+  luminositeBox.update();
+  temperatureBox.update();
+  precipitaionBox.update();
+  // A short delay is necessary to give Andee time to communicate with the smartphone
+  delay(1000);
+}
