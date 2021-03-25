@@ -1,0 +1,303 @@
+#include <Andee.h>
+#include <SPI.h>
+#include <LiquidCrystal.h>
+
+////////Clock//////////////
+#include <Wire.h>
+#include "ds3231.h"
+
+uint8_t time[8];
+char recv[128];
+unsigned int recv_size = 0;
+///////////////////////////
+
+const unsigned int MAIN = 0;
+const unsigned int COL_CHANGE = 1;
+
+const byte PIN_G = 3;
+const byte PIN_R = 5;
+const byte PIN_B = 6;
+
+byte r = 0;
+byte g = 0;
+byte b = 0;
+
+AndeeHelper displayTime;
+AndeeHelper displayAlarm;
+AndeeHelper alarmInputButton;
+AndeeHelper changeColorButton;
+
+AndeeHelper redSlider;
+AndeeHelper greenSlider;
+AndeeHelper blueSlider;
+
+bool mainState = true;
+
+boolean sleeping = true;
+
+bool alarm = false;
+
+char timeString[30];
+char alarmString[30];
+
+int timeHour;
+int timeMinute;
+int timeSecond;
+
+int  alarmHour = 8;
+int  alarmMinute = 0;
+int  alarmSecond = 0;
+
+bool timeNotSet = true;
+
+LiquidCrystal lcd(9, 10, 2, 4, 7, 8);
+
+byte clock[8] = {
+  B00000,
+  B00000,
+  B01110,
+  B10101,
+  B10111,
+  B10001,
+  B01110,
+  B00000
+};
+
+void setup(){
+  Serial.begin(9600);
+ 
+  Wire.begin();
+  DS3231_init(DS3231_INTCN);
+  memset(recv, 0, 128);
+
+  lcd.begin(16, 2);
+  lcd.createChar(0, clock);
+
+  Andee.begin();
+
+  setInitialData();
+}
+
+void loop(){
+
+ //////////CLOCK///////////
+  char in;
+  unsigned long now = millis();
+  struct ts t;
+
+  DS3231_get(&t);
+
+  sprintf(timeString, "%02d:%02d:%02d", t.hour, t.min, t.sec);
+
+  ///////////////////////////
+
+
+  //Update State
+  if(mainState == true)
+  {
+    //UpdateMain
+    displayTime.update();
+    displayAlarm.update();
+
+    alarmInputButton.update();
+
+    changeColorButton.setTitle("Change LED-WakeUp-Color");
+    changeColorButton.update();
+
+    //Show LED Color
+    analogWrite(PIN_G, 0);
+    analogWrite(PIN_R, 0);
+    analogWrite(PIN_B, 0);
+  }
+ 
+  //Show the LED-Sliders to choose LED-Color
+  if(mainState == false)
+  {
+    redSlider.update();
+    greenSlider.update();
+    blueSlider.update();
+    changeColorButton.setTitle("BACK");
+    changeColorButton.update();
+
+    //Show LED Color
+    analogWrite(PIN_G, redSlider.getSliderValue(INT));
+    analogWrite(PIN_R, greenSlider.getSliderValue(INT));
+    analogWrite(PIN_B, blueSlider.getSliderValue(INT));
+  }
+
+  //Check if "Set Alarm" Button is pressed
+  if( alarmInputButton.isPressed() )
+  {
+    alarmInputButton.setDefaultTime(timeHour, timeMinute, 0);
+    alarmInputButton.ack();
+    alarmInputButton.getTimeInput(&alarmHour, &alarmMinute, &alarmSecond);
+  }
+
+  //Syncronise the time everyday at 0 AM or if time wasn't set yet
+  if((t.hour == 0 && t.min == 0 && t.sec == 00 || timeNotSet) && Andee.isConnected()){
+    Andee.getDeviceTime(&timeHour, &timeMinute,&timeSecond);
+    sprintf(timeString, "T%02d%02d%02d%01d%01d%d",t.sec, t.min, t.hour, t.wday, t.mday, t.mon, t.year);
+
+    struct ts t;
+
+    t.sec = timeSecond;
+    t.min = timeMinute;
+    t.hour = timeHour;
+    t.wday = 1;
+    t.mday = 01;
+    t.mon = 01;
+    t.year = 2014;
+    DS3231_set(t);
+
+    timeNotSet = false;
+  }
+
+  //iPhone GUI: Show the time in the DisplayBox
+  displayTime.setData(timeString);
+
+  //iPhone GUI: Show the alarm in the DisplayBox
+  sprintf(alarmString, "%02d:%02d", alarmHour, alarmMinute);
+  displayAlarm.setData(alarmString);
+
+  //iPhone GUI: Switch the GUI-Elements
+  if( changeColorButton.isPressed() )
+  {
+    changeColorButton.ack();
+    if(mainState == true)
+    {
+      mainState = false;
+      Andee.clear();
+    }
+    else
+    {
+      mainState = true;
+      Andee.clear();
+     
+      //This aparently has to be done because sometimes the alarm button doesn't show up
+      alarmInputButton.setId(2);
+      alarmInputButton.setType(TIME_IN);
+      alarmInputButton.setLocation(2,0,FULL);
+      alarmInputButton.setTitle("Set Alarm");
+      alarmInputButton.setColor(THEME_MIDNIGHT_DARK);
+    }
+  }
+
+  //Check Alarm
+  if(timeHour == alarmHour && timeMinute == alarmMinute && alarm == true)
+  {
+    sleeping = false;
+  }
+
+  //Fade-In LED-Strip
+  if(sleeping == false)
+  { 
+
+    for (int brightness=0; brightness<240; brightness++){
+
+      r += (float)redSlider.getSliderValue(FLOAT) / 240.00;
+      g += (float)greenSlider.getSliderValue(FLOAT) / 240.00;
+      b += (float)blueSlider.getSliderValue(FLOAT) / 240.00;
+
+      analogWrite(PIN_R,r);
+      analogWrite(PIN_G,g);
+      analogWrite(PIN_B,b);
+
+      delay(250);
+    }
+
+    sleeping = true;
+    r = 0;
+    g = 0;
+    b = 0;
+
+  }
+
+  //Show Time and Alarm on the LCD
+  lcd.setCursor(4, 0);
+  lcd.print(timeString);
+  lcd.setCursor(4, 1);
+  lcd.print(alarmString);
+
+  if(analogRead(5) > 1000)
+  {
+    lcd.setCursor(9, 1);
+    lcd.print(" ");
+    lcd.write((uint8_t)0);
+  }
+  else{
+    lcd.setCursor(9, 1);
+    lcd.print("  ");
+  }
+
+  //Delay for Bluetooth-Communication
+  delay(500);
+
+}
+
+//Set-Up the Annikken-GUI
+void setInitialData()
+{
+ 
+  displayTime.setId(0);
+  displayTime.setType(DATA_OUT);
+  displayTime.setLocation(0,0,FULL);
+  displayTime.setTitle("Time");
+  displayTime.setColor(THEME_MIDNIGHT_DARK);
+
+  displayAlarm.setId(1);
+  displayAlarm.setType(DATA_OUT);
+  displayAlarm.setLocation(1,0,FULL);
+  displayAlarm.setTitle("Alarm");
+  displayAlarm.setColor(THEME_MIDNIGHT_DARK);
+
+  alarmInputButton.setId(2);
+  alarmInputButton.setType(TIME_IN); // Sets object as a time input button
+  alarmInputButton.setLocation(2,0,FULL);
+  alarmInputButton.setTitle("Set Alarm");
+  alarmInputButton.setColor(THEME_MIDNIGHT_DARK);
+
+  changeColorButton.setId(3);
+  changeColorButton.setType(BUTTON_IN); // Sets object as a time input button
+  changeColorButton.setLocation(3,0,FULL);
+  changeColorButton.setTitle("Change LED-WakeUp-Color");
+  changeColorButton.requireAck(true);
+  changeColorButton.setColor(THEME_MIDNIGHT_DARK);
+
+  // Draw red slider
+  redSlider.setId(4); 
+  redSlider.setType(SLIDER_IN); // Set object as a slider
+  redSlider.setLocation(0, 0, FULL); // Sliders can only be full size
+  redSlider.setTitle("Red Channel");
+  redSlider.setSliderMinMax(0, 255);
+  redSlider.setSliderInitialValue(0); 
+  redSlider.setSliderNumIntervals(256); // Set as discrete slider
+  redSlider.setSliderReportMode(ON_VALUE_CHANGE); // Update values as you're moving
+  redSlider.setSliderColor(THEME_RED); // Slider bar colour
+  redSlider.setColor(THEME_RED_DARK); // Slider background colour 
+
+  // Draw green slider
+  greenSlider.setId(5); 
+  greenSlider.setType(SLIDER_IN); // Set object as a slider
+  greenSlider.setLocation(1, 0, FULL); // Sliders can only be full size
+  greenSlider.setTitle("Green Channel");
+  greenSlider.setSliderMinMax(0, 255);
+  greenSlider.setSliderInitialValue(0); 
+  greenSlider.setSliderNumIntervals(256); // Set as discrete slider
+  greenSlider.setSliderReportMode(ON_VALUE_CHANGE); // Update values as you're moving
+  greenSlider.setSliderColor(THEME_GREEN); // Slider bar colour
+  greenSlider.setColor(THEME_GREEN_DARK); // Slider background colour 
+
+  // Draw blue slider
+  blueSlider.setId(6); 
+  blueSlider.setType(SLIDER_IN); // Set object as a slider
+  blueSlider.setLocation(2, 0, FULL); // Sliders can only be full size
+  blueSlider.setTitle("Blue Channel");
+  blueSlider.setSliderMinMax(0, 255);
+  blueSlider.setSliderInitialValue(0); 
+  blueSlider.setSliderNumIntervals(256); // Set as discrete slider
+  blueSlider.setSliderReportMode(ON_VALUE_CHANGE); // Update values as you're moving
+  blueSlider.setSliderColor(THEME_BLUE); // Slider bar colour
+  blueSlider.setColor(THEME_BLUE_DARK); // Slider background colour
+
+}
+
